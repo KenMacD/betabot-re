@@ -14,6 +14,7 @@ import struct
 import sys
 import os
 import pprint
+import argparse
 
 from Crypto.Cipher import ARC4
 
@@ -105,6 +106,33 @@ class Config(object):
 
             self.servers.append(section)
 
+    @staticmethod
+    def makeURL(server):
+        SSL = server["ssl"]
+        port = server["port"]
+
+        if SSL:
+            url = "https://"
+        else:
+            url = "http://"
+
+        url = url + server["host"]
+
+        if not ((port == 80 and not SSL) or (port == 443 and SSL)):
+            url = url + ":" + str(port)
+
+        url = url + str(server["path"])
+        return url
+
+    def __repr__(self):
+        lines = []
+        for (i, server) in enumerate(self.servers):
+            lines.append("%s,%s,%d,%s,%s,%s,%s"%(self.owner, self.config_version,
+                i+1, self.makeURL(server), str(server["attempts"]),
+                str(server["key1"]).encode("hex").upper(),
+                str(server["key2"]).encode("hex").upper()))
+        return "\n".join(lines)
+
     def __str__(self):
         lines = []
         lines.append("BetaBot Config (version %s):"%(self.config_version,))
@@ -113,24 +141,7 @@ class Config(object):
         lines.append("  String2: %s"%(self.s2,))
         for (i, c) in enumerate(self.servers):
             lines.append("  Config %d:"%(i,))
-            SSL = c["ssl"]
-            port = c["port"]
-
-            if SSL:
-                url = "https://"
-            else:
-                url = "http://"
-
-            url = url + c["host"]
-
-            if not ((port == 80 and not SSL) or (port == 443 and SSL)):
-                url = url + ":" + str(port)
-
-            url = url + str(c["path"])
-
-    #        lines.append("Match: %s,%s,%d,%s,%s,%s,%s"%(config["Owner"], config["_ver"],
-    #                                i+1, url, str(c["Attempts"]), str(c["Key1"]),
-    #                                str(c["Key2"]))
+            url = self.makeURL(c)
             lines.append("    URL: " + url)
             lines.append("    Attempts: " + str(c["attempts"]))
             lines.append("    Key1: " + str(c["key1"]).encode("hex").upper())
@@ -244,36 +255,43 @@ def unpack_unicode(buf, offset):
     bufcopy = buf[offset::2]
     return unpack_string(bufcopy, 0)
 
-def main():
-    if len(sys.argv) != 2:
-        print "Usage: {0} <dumpfile>".format(sys.argv[0])
-        sys.exit(1)
-
-    with open(sys.argv[1], mode="rb") as sample:
+def main(filepath, quiet=False):
+    with open(filepath, mode="rb") as sample:
         data = sample.read()
 
-    print " [*] Offset searching for version 1 config"
     config = Config_v1.offset_search(data)
     if config:
-        print "   [*] Found version 1 config"
-        print str(config)
+        if not quiet:
+            print " [*] Found version 1 config"
+            print str(config)
+        else:
+            print repr(config)
+
         return
 
-    print " [*] Offset searching for version 1.5 config"
     config = Config_v1p5.offset_search(data)
     if config:
-        print "   [*] Found version 1.5 config"
-        print str(config)
+        if not quiet:
+            print "   [*] Found version 1.5 config"
+            print str(config)
+        else:
+            print repr(config)
         return
 
-    print " [*] Offset searching for version 1.6 config"
     config = Config_v1p6.offset_search(data)
     if config:
-        print "   [*] Found version 1.6 config"
-        print str(config)
+        if not quiet:
+            print "   [*] Found version 1.6 config"
+            print str(config)
+        else:
+            print repr(config)
         return
-
-    print " [*] No configs found"
+    if not quiet:
+        print " [*] No configs found"
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-q", "--quiet", help="Show only matched lines in csv", action="store_true")
+    parser.add_argument("file", help="Sample or memory dump to search")
+    args = parser.parse_args()
+    main(args.file, args.quiet)
